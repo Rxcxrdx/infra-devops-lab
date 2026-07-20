@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shell-app
+  labels:
+    app: shell-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: shell-app
+  template:
+    metadata:
+      labels:
+        app: shell-app
+    spec:
+      containers:
+        - name: shell-app
+          image: devopslab01acr.azurecr.io/shell-app:manual2
+          ports:
+            - containerPort: 3000
+          # CONSULTAS_URL/REPORTES_URL no van acá: Module Federation las graba
+          # en el bundle en el momento del `docker build` (--build-arg), no se
+          # leen en runtime.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5

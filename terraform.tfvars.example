@@ -1,0 +1,13 @@
+# Copia este archivo a terraform.tfvars y ajusta los valores.
+
+my_ip = "203.0.113.10" # tu IP pública actual (sin /32)
+
+# Opcionales (tienen defaults razonables en variables.tf):
+# location             = "eastus2"
+# resource_group_name  = "rg-devops-lab"
+# name_prefix          = "devopslab"
+# vm_admin_username    = "azureuser"
+# ssh_public_key_path  = "~/.ssh/devops_lab_rsa.pub"  # debe ser RSA
+# aks_node_count       = 1
+# aks_node_vm_size     = "Standard_B2s"
+# jenkins_vm_size      = "Standard_B2s"

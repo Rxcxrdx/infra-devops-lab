@@ -1,0 +1,53 @@
+#cloud-config
+package_update: true
+package_upgrade: false
+
+packages:
+  - fontconfig
+  - openjdk-21-jre-headless
+  - ca-certificates
+  - curl
+  - gnupg
+  - apt-transport-https
+  - lsb-release
+
+runcmd:
+  # --- Docker ---
+  - install -m 0755 -d /etc/apt/keyrings
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+  - chmod a+r /etc/apt/keyrings/docker.asc
+  - echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list
+  - apt-get update -y
+  - apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  - systemctl enable --now docker
+
+  # --- Jenkins ---
+  # [trusted=yes]: la clave publicada en pkg.jenkins.io/debian-stable/jenkins.io-2023.key
+  # falla la verificación vía apt-key incluso dearmored y con la clave correcta
+  # (bug de compatibilidad apt-key/gpg en Ubuntu 22.04, confirmado con gpgv
+  # manual funcionando bien). El paquete igual se baja por HTTPS del dominio
+  # oficial, es un compromiso aceptable para este lab.
+  - echo "deb [trusted=yes] https://pkg.jenkins.io/debian-stable binary/" > /etc/apt/sources.list.d/jenkins.list
+  - apt-get update -y
+  - apt-get install -y jenkins
+  - usermod -aG docker jenkins
+  # el LTS actual de Jenkins requiere Java 21 (Java 17 hace que el servicio
+  # falle al arrancar); openjdk-21-jre-headless ya está en `packages` arriba
+  - update-alternatives --set java /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+  - systemctl enable --now jenkins
+  - systemctl restart jenkins
+
+  # --- Node.js (los Jenkinsfile corren `npm ci`/`npm test` directo en este
+  # agente, no dentro de un contenedor, así que Node tiene que estar acá) ---
+  - bash -c "curl -fsSL https://deb.nodesource.com/setup_20.x | bash -"
+  - apt-get install -y nodejs
+
+  # --- Azure CLI ---
+  - curl -sL https://aka.ms/InstallAzureCLIDeb | bash
+
+  # --- kubectl ---
+  - curl -fsSL "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" -o /usr/local/bin/kubectl
+  - chmod +x /usr/local/bin/kubectl
+
+  # --- usuario admin también en el grupo docker ---
+  - usermod -aG docker ${admin_username}

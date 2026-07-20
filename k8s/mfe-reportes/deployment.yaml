@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mfe-reportes
+  labels:
+    app: mfe-reportes
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mfe-reportes
+  template:
+    metadata:
+      labels:
+        app: mfe-reportes
+    spec:
+      containers:
+        - name: mfe-reportes
+          image: devopslab01acr.azurecr.io/mfe-reportes:manual2
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5

@@ -1,0 +1,55 @@
+# El rewrite-target solo se aplica a /api, /consultas y /reportes: esos
+# backends esperan recibir las requests sin el prefijo (ej. api-node solo
+# conoce /health, no /api/health). shell-app en cambio necesita ver la ruta
+# completa (sus assets de Next.js viven bajo /_next/...), por eso va en un
+# Ingress separado sin rewrite.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: apps-ingress-prefixed
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /api(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: api-node
+                port:
+                  number: 3001
+          - path: /consultas(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: mfe-consultas
+                port:
+                  number: 80
+          - path: /reportes(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: mfe-reportes
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: apps-ingress-root
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: shell-app
+                port:
+                  number: 3000

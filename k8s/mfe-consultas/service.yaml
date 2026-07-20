@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mfe-consultas
+spec:
+  type: ClusterIP
+  selector:
+    app: mfe-consultas
+  ports:
+    - port: 80
+      targetPort: 80
