@@ -5,6 +5,14 @@ Este documento es la memoria de lo que ya se probó y funcionó en este POC
 (o cualquier sesión de Claude Code) pueda retomarlo sin repetir los mismos
 errores que ya resolvimos.
 
+> **Estado actual: todo destruido (`terraform destroy`, 12 recursos, resource
+> group `rg-devops-lab` eliminado).** El laboratorio se dio por cerrado
+> después de completar Fase 1 (infra), Fase 2 (deploy manual) y Fase 3
+> (Jenkins CI/CD funcionando de punta a punta con las 4 apps). Costo actual:
+> cero. Para retomar, ir directo a la sección "Desde cero" — el resto de las
+> secciones (URLs, IPs, tags de imagen) son historia de la última corrida,
+> no van a coincidir hasta que se vuelva a aplicar.
+
 ## Estado de la infraestructura
 
 Puede estar en 3 estados distintos. Verificar antes de asumir nada:
