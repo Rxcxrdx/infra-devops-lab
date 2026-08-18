@@ -1,76 +1,113 @@
 # infra-devops-lab
 
-Infraestructura mínima en Azure (Terraform) para un laboratorio de DevOps:
-Resource Group, VNet con 2 subnets, ACR (Basic), AKS (1 nodo Standard_B2s) y
-una VM de Jenkins (Ubuntu 22.04, Standard_B2s) con Docker, Java 17, Azure CLI
-y kubectl preinstalados vía cloud-init.
+<p>
+  <img src="https://img.shields.io/badge/Terraform-7B42BC?style=flat-square&logo=terraform&logoColor=white" alt="Terraform"/>
+  <img src="https://img.shields.io/badge/Microsoft_Azure-0078D4?style=flat-square&logo=microsoftazure&logoColor=white" alt="Azure"/>
+  <img src="https://img.shields.io/badge/Kubernetes-326CE5?style=flat-square&logo=kubernetes&logoColor=white" alt="Kubernetes"/>
+  <img src="https://img.shields.io/badge/Jenkins-D24939?style=flat-square&logo=jenkins&logoColor=white" alt="Jenkins"/>
+</p>
 
-Todo está dimensionado al mínimo (sin zonas de disponibilidad, sin Log
-Analytics) para minimizar costos. **Esto sigue generando cargos mientras
-los recursos existan.**
+Azure infrastructure and Kubernetes manifests for the DevOps lab: resource
+group, virtual network with two subnets, container registry, AKS cluster, and a
+Jenkins VM provisioned through cloud-init.
 
-## Requisitos
+> Part of the [**Micro-Frontends on Azure AKS**](https://github.com/Rxcxrdx/microfrontends-aks-jenkins)
+> project — see that repository for the full architecture overview.
+
+## What gets provisioned
+
+| Resource | Notes |
+|:--|:--|
+| Resource Group | Single group holding every resource, in `eastus2` |
+| Virtual Network | `10.0.0.0/16`, with dedicated subnets for AKS and Jenkins |
+| Container Registry | Basic tier, admin user enabled for simplicity |
+| AKS cluster | Single node, `AcrPull` role assigned via Managed Identity |
+| Jenkins VM | Ubuntu 22.04 with Docker, Java 21, Node 20, kubectl, and Azure CLI |
+| Network Security Group | SSH and port 8080 restricted to one IP plus GitHub webhook ranges |
+
+Everything is sized to the minimum — no availability zones, no Log Analytics —
+to keep lab costs down. **Resources are billable while they exist.**
+
+## Requirements
 
 - Terraform >= 1.7
-- Azure CLI autenticado (`az login`) con una suscripción activa
-- Una clave pública SSH (por defecto `~/.ssh/id_ed25519.pub`)
-- Tu IP pública actual (`curl ifconfig.me`)
+- Azure CLI authenticated (`az login`) with an active subscription
+- An **RSA** SSH public key — Azure rejects ed25519 for Linux VMs
+- Your current public IP (`curl ifconfig.me`)
 
-## Uso
+## Usage
 
 ```bash
 cp terraform.tfvars.example terraform.tfvars
-# editar terraform.tfvars: al menos my_ip
+# set at least my_ip
 
 terraform init
-terraform plan        # revisa QUÉ se va a crear antes de aplicar
-terraform apply        # ~10-15 min
+terraform plan     # review what will be created
+terraform apply    # roughly 10-15 minutes
 ```
 
-Al finalizar, Terraform imprime:
-- IP pública de la VM de Jenkins
-- Login server del ACR
-- El comando `az aks get-credentials ...` para configurar kubectl
+Terraform outputs the Jenkins VM public IP, the registry login server, and the
+`az aks get-credentials` command for configuring kubectl.
 
-Verifica el cluster:
+Verify the cluster:
 
 ```bash
-az aks get-credentials --resource-group rg-devops-lab --name aks-devops-lab
-kubectl get nodes     # debe mostrar 1 nodo Ready
+az aks get-credentials --resource-group <resource-group> --name <cluster-name>
+kubectl get nodes
 ```
 
-Jenkins queda disponible en `http://<ip-publica>:8080` (solo accesible desde
-tu IP y desde los rangos de webhooks de GitHub). La contraseña inicial de
-Jenkins se obtiene por SSH:
+## Deploying the applications
+
+The `k8s/` directory holds the manifests for the four applications:
 
 ```bash
-ssh azureuser@<ip-publica> sudo cat /var/lib/jenkins/secrets/initialAdminPassword
+kubectl apply -f k8s/api-node/
+kubectl apply -f k8s/mfe-consultas/
+kubectl apply -f k8s/mfe-reportes/
+kubectl apply -f k8s/shell-app/
+kubectl apply -f k8s/ingress.yaml
 ```
 
-## Notas de seguridad / costos
+Ingress routing is split across two resources. `/api`, `/consultas`, and
+`/reportes` use `rewrite-target` because those backends do not know their path
+prefix; `/` routes to the host application **without** rewriting, because
+Next.js needs the full path to serve its assets under `/_next/`.
 
-- El NSG de la VM de Jenkins solo permite 22 y 8080 desde `var.my_ip` y 8080
-  desde los rangos de webhook de GitHub (`var.github_webhook_cidrs`, ver
-  https://api.github.com/meta). Si tu IP cambia, actualiza `terraform.tfvars`
-  y vuelve a aplicar.
-- El ACR tiene el usuario admin habilitado (necesario para simplificar el
-  login desde Jenkins/docker); considera deshabilitarlo y usar un service
-  principal o `az acr login` con AAD si esto pasa de ser un laboratorio.
-- AKS usa 1 solo nodo `Standard_B2s`: sin alta disponibilidad, solo para
-  pruebas.
+## Jenkins
 
-## Destruir todo al final de la sesión
+Jenkins is available at `http://<vm-public-ip>:8080`, reachable only from the
+configured IP and from GitHub's webhook ranges. The initial admin password:
+
+```bash
+ssh azureuser@<vm-public-ip> sudo cat /var/lib/jenkins/secrets/initialAdminPassword
+```
+
+Each application repository defines its own Multibranch Pipeline job. Note that
+the GitHub Branch Source plugin only accepts "Username with password"
+credentials for repository access, even when the password is a personal access
+token.
+
+## Security and cost notes
+
+- The network security group restricts SSH and 8080 to `var.my_ip` and
+  `var.github_webhook_cidrs` (see https://api.github.com/meta). Update
+  `terraform.tfvars` and re-apply when your IP changes.
+- The registry admin user is enabled to simplify Docker login from Jenkins.
+  Beyond a lab, prefer a Service Principal or `az acr login` with Entra ID.
+- AKS runs a single node: no high availability.
+- `terraform.tfstate`, `terraform.tfvars`, and kubeconfig files are excluded via
+  `.gitignore` and must never be committed — state files contain secrets.
+
+## Tearing down
 
 ```bash
 terraform destroy
 ```
 
-Si vas a continuar al día siguiente y quieres evitar el costo de AKS durante
-la noche sin perder la configuración, puedes pausar el cluster en lugar de
-destruirlo (la VM de Jenkins y el ACR igual siguen facturando):
+To pause overnight without losing configuration (the VM and registry still
+incur charges):
 
 ```bash
-az aks stop --name aks-devops-lab --resource-group rg-devops-lab
-# al retomar:
-az aks start --name aks-devops-lab --resource-group rg-devops-lab
+az aks stop  --name <cluster-name> --resource-group <resource-group>
+az aks start --name <cluster-name> --resource-group <resource-group>
 ```
